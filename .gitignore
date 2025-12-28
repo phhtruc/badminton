@@ -1,0 +1,51 @@
+# Environment files
+local.env
+.env.local
+.env.production
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# Node
+node_modules/
+dist/
+.cache/
+
+# Spring Boot
+HELP.md
+.gradle
+build/
+
+# Sensitive data
+application-local.yaml
+application-prod.yaml
+*.key
+*.pem
+*.crt
+
