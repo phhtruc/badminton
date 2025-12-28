@@ -15,12 +15,21 @@
           </div>
           <div class="form-group">
             <label>Mật khẩu</label>
-            <input
-              type="password"
-              v-model="form.password"
-              placeholder="Nhập mật khẩu"
-              required
-            />
+            <div class="password-input-wrapper">
+              <input
+                :type="showPassword ? 'text' : 'password'"
+                v-model="form.password"
+                placeholder="Nhập mật khẩu"
+                required
+              />
+              <button
+                type="button"
+                class="toggle-password"
+                @click="showPassword = !showPassword"
+              >
+                {{ showPassword ? '👁️' : '👁️‍🗨️' }}
+              </button>
+            </div>
           </div>
           <div v-if="error" class="error-message">{{ error }}</div>
           <button type="submit" class="btn btn-primary btn-full" :disabled="loading">
@@ -49,6 +58,7 @@ export default {
       email: '',
       password: ''
     })
+    const showPassword = ref(false)
     const error = ref('')
     const loading = ref(false)
 
@@ -60,7 +70,13 @@ export default {
         await authStore.login(form.value)
         router.push('/')
       } catch (err) {
-        error.value = err.response?.data || 'Đăng nhập thất bại. Vui lòng thử lại.'
+        if (err.response?.data?.error) {
+          error.value = err.response.data.error
+        } else if (err.response?.data) {
+          error.value = err.response.data
+        } else {
+          error.value = 'Email hoặc mật khẩu không đúng.'
+        }
       } finally {
         loading.value = false
       }
@@ -68,6 +84,7 @@ export default {
 
     return {
       form,
+      showPassword,
       error,
       loading,
       handleLogin
@@ -107,6 +124,26 @@ export default {
   color: var(--text-dark);
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  padding-right: 45px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 5px;
+}
+
 .error-message {
   color: #dc3545;
   background: #ffebee;
@@ -131,4 +168,3 @@ export default {
   font-weight: 500;
 }
 </style>
-
