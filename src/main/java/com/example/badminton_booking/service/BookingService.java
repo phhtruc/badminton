@@ -42,13 +42,28 @@ public class BookingService {
             throw new RuntimeException("Sân không hoạt động");
         }
 
+        // Kiểm tra giờ bắt đầu và kết thúc hợp lệ
         if (request.getStartTime().isBefore(court.getOpenTime()) ||
             request.getEndTime().isAfter(court.getCloseTime())) {
-            throw new RuntimeException("Thời gian đặt sân không hợp lệ");
+            throw new RuntimeException("Thời gian đặt sân không hợp lệ. Sân mở cửa từ " +
+                court.getOpenTime() + " đến " + court.getCloseTime());
         }
 
-        if (request.getStartTime().isAfter(request.getEndTime())) {
+        if (request.getStartTime().isAfter(request.getEndTime()) ||
+            request.getStartTime().equals(request.getEndTime())) {
             throw new RuntimeException("Giờ bắt đầu phải trước giờ kết thúc");
+        }
+
+        // Kiểm tra xung đột lịch đặt sân
+        List<Booking> conflictingBookings = bookingRepository.findConflictingBookings(
+            request.getCourtId(),
+            request.getBookingDate(),
+            request.getStartTime(),
+            request.getEndTime()
+        );
+
+        if (!conflictingBookings.isEmpty()) {
+            throw new RuntimeException("Khung giờ này đã có người đặt. Vui lòng chọn khung giờ khác.");
         }
 
         Booking booking = new Booking();
@@ -191,4 +206,3 @@ public class BookingService {
         return response;
     }
 }
-

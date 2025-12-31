@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,5 +33,15 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     List<Booking> findByStatus(String status);
 
     List<Booking> findByUserId(UUID userId);
-}
 
+    @Query("SELECT b FROM Booking b WHERE b.court.id = :courtId " +
+           "AND b.bookingDate = :bookingDate " +
+           "AND b.status IN ('PENDING', 'APPROVED') " +
+           "AND ((b.startTime < :endTime AND b.endTime > :startTime))")
+    List<Booking> findConflictingBookings(
+        @Param("courtId") Integer courtId,
+        @Param("bookingDate") LocalDate bookingDate,
+        @Param("startTime") LocalTime startTime,
+        @Param("endTime") LocalTime endTime
+    );
+}

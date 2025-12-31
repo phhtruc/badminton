@@ -8,7 +8,6 @@
         <div class="court-selection card">
           <h3>Chọn sân</h3>
           <select v-model="selectedCourtId" @change="loadBookings">
-            <option value="">Tất cả sân</option>
             <option v-for="court in courts" :key="court.id" :value="court.id">
               {{ court.name }}
             </option>
@@ -39,10 +38,13 @@
                 v-for="day in weekDays"
                 :key="`${day.date}-${hour}`"
                 class="booking-cell"
-                @click="openBookingModal(day.date, hour)"
+                @mousedown="startDrag(day.date, hour)"
+                @mouseenter="onDragOver(day.date, hour)"
+                @mouseup="endDrag"
                 :class="{
                   'has-booking': hasBooking(day.date, hour),
-                  'past': isPast(day.date, hour)
+                  'past': isPast(day.date, hour),
+                  'selecting': isSelecting(day.date, hour)
                 }"
               >
                 <div v-if="getBooking(day.date, hour)" class="booking-info">
@@ -122,7 +124,12 @@ export default {
     const bookingError = ref('')
     const submitting = ref(false)
 
-    const timeSlots = Array.from({ length: 16 }, (_, i) => i + 6) // 6:00 - 21:00
+    // Drag selection state
+    const isDragging = ref(false)
+    const dragStart = ref(null)
+    const dragEnd = ref(null)
+
+    const timeSlots = Array.from({ length: 18 }, (_, i) => i + 5) // 5:00 - 22:00
 
     const weekDays = computed(() => {
       const days = []
@@ -130,8 +137,14 @@ export default {
       for (let i = 0; i < 7; i++) {
         const date = new Date(currentWeekStart.value)
         date.setDate(date.getDate() + i)
+        // Format date as YYYY-MM-DD in local timezone
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const dateStr = `${year}-${month}-${day}`
+
         days.push({
-          date: date.toISOString().split('T')[0],
+          date: dateStr,
           dateStr: `${date.getDate()}/${date.getMonth() + 1}`,
           dayName: dayNames[date.getDay()]
         })
@@ -159,6 +172,10 @@ export default {
       try {
         const response = await courtService.getAllCourts()
         courts.value = response.data
+        // Mặc định chọn sân số 1 (court đầu tiên)
+        if (courts.value.length > 0) {
+          selectedCourtId.value = courts.value[0].id
+        }
       } catch (error) {
         console.error('Error loading courts:', error)
       }
@@ -166,14 +183,12 @@ export default {
 
     const loadBookings = async () => {
       try {
-        const startDate = currentWeekStart.value.toISOString().split('T')[0]
-        const endDate = new Date(currentWeekStart.value)
-        endDate.setDate(endDate.getDate() + 6)
-        const endDateStr = endDate.toISOString().split('T')[0]
+        const startDate = weekDays.value[0].date
+        const endDate = weekDays.value[6].date
 
         const response = selectedCourtId.value
-          ? await bookingService.getCourtWeeklyBookings(selectedCourtId.value, startDate, endDateStr)
-          : await bookingService.getWeeklyBookings(startDate, endDateStr)
+          ? await bookingService.getCourtWeeklyBookings(selectedCourtId.value, startDate, endDate)
+          : await bookingService.getWeeklyBookings(startDate, endDate)
 
         bookings.value = response.data
       } catch (error) {
@@ -183,15 +198,25 @@ export default {
 
     const hasBooking = (date, hour) => {
       return bookings.value.some(b => {
-        const bookingHour = parseInt(b.startTime.split(':')[0])
-        return b.bookingDate === date && bookingHour === hour
+        if (b.bookingDate !== date) return false
+
+        const startHour = parseInt(b.startTime.split(':')[0])
+        const endHour = parseInt(b.endTime.split(':')[0])
+
+        // Kiểm tra nếu hour nằm trong khoảng [startHour, endHour)
+        return hour >= startHour && hour < endHour
       })
     }
 
     const getBooking = (date, hour) => {
       return bookings.value.find(b => {
-        const bookingHour = parseInt(b.startTime.split(':')[0])
-        return b.bookingDate === date && bookingHour === hour
+        if (b.bookingDate !== date) return false
+
+        const startHour = parseInt(b.startTime.split(':')[0])
+        const endHour = parseInt(b.endTime.split(':')[0])
+
+        // Chỉ hiển thị thông tin ở ô đầu tiên
+        return hour === startHour
       })
     }
 
@@ -202,15 +227,60 @@ export default {
       return cellDate < now
     }
 
-    const openBookingModal = (date, hour) => {
-      if (isPast(date, hour)) return
-      if (hasBooking(date, hour)) return
+    // Drag selection functions
+    const startDrag = (date, hour) => {
+      if (isPast(date, hour) || hasBooking(date, hour)) return
+
+      isDragging.value = true
+      dragStart.value = { date, hour }
+      dragEnd.value = { date, hour }
+    }
+
+    const onDragOver = (date, hour) => {
+      if (!isDragging.value) return
+      if (isPast(date, hour) || hasBooking(date, hour)) return
+
+      // Chỉ cho phép kéo trong cùng một ngày
+      if (date === dragStart.value.date) {
+        dragEnd.value = { date, hour }
+      }
+    }
+
+    const endDrag = () => {
+      if (!isDragging.value) return
+
+      if (dragStart.value && dragEnd.value) {
+        const startHour = Math.min(dragStart.value.hour, dragEnd.value.hour)
+        const endHour = Math.max(dragStart.value.hour, dragEnd.value.hour) + 1
+
+        openBookingModal(dragStart.value.date, startHour, endHour)
+      }
+
+      isDragging.value = false
+      dragStart.value = null
+      dragEnd.value = null
+    }
+
+    const isSelecting = (date, hour) => {
+      if (!isDragging.value || !dragStart.value || !dragEnd.value) return false
+      if (date !== dragStart.value.date) return false
+
+      const minHour = Math.min(dragStart.value.hour, dragEnd.value.hour)
+      const maxHour = Math.max(dragStart.value.hour, dragEnd.value.hour)
+
+      return hour >= minHour && hour <= maxHour
+    }
+
+    const openBookingModal = (date, startHour, endHour = null) => {
+      if (!endHour) {
+        endHour = startHour + 1
+      }
 
       bookingForm.value = {
         courtId: selectedCourtId.value || '',
         bookingDate: date,
-        startTime: `${hour.toString().padStart(2, '0')}:00`,
-        endTime: `${(hour + 1).toString().padStart(2, '0')}:00`,
+        startTime: `${startHour.toString().padStart(2, '0')}:00`,
+        endTime: `${endHour.toString().padStart(2, '0')}:00`,
         note: ''
       }
       showModal.value = true
@@ -248,8 +318,9 @@ export default {
     }
 
     onMounted(() => {
-      loadCourts()
-      loadBookings()
+      loadCourts().then(() => {
+        loadBookings()
+      })
     })
 
     return {
@@ -266,6 +337,10 @@ export default {
       hasBooking,
       getBooking,
       isPast,
+      isSelecting,
+      startDrag,
+      onDragOver,
+      endDrag,
       openBookingModal,
       closeModal,
       submitBooking,
@@ -315,6 +390,7 @@ export default {
   min-width: 900px;
   gap: 1px;
   background: var(--border-color);
+  user-select: none;
 }
 
 .time-header, .day-header, .time-cell, .booking-cell {
@@ -364,6 +440,11 @@ export default {
 .booking-cell.past {
   background: #f5f5f5;
   cursor: not-allowed;
+}
+
+.booking-cell.selecting {
+  background: #c8e6c9 !important;
+  border: 2px solid var(--primary-green);
 }
 
 .booking-info {
@@ -434,4 +515,3 @@ export default {
   }
 }
 </style>
-
